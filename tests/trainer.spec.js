@@ -11,8 +11,14 @@ test.beforeEach(async ({ page }) => {
   // a blocked web font is not a bug in the page; anything else logged as an error is
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/i.test(m.text())) errors.push(m.text()); });
   await page.goto('/');
-  await expect(page.locator('#practice .modes')).toBeVisible();
+  await enter(page);
 });
+
+// a first visit opens on the guide; go through it to the trainer
+async function enter(page) {
+  await page.getByRole('button', { name: 'Start practising' }).first().click();
+  await expect(page.locator('#practice .modes')).toBeVisible();
+}
 test.afterEach(() => { expect(errors, 'the page should not log script errors').toEqual([]); });
 
 // tap on touch screens, click with a mouse
@@ -36,6 +42,31 @@ async function expectFits(page, where) {
   expect(r.out, `${where}: elements outside the ${r.vw}px wide screen`).toEqual([]);
   expect(r.sw, `${where}: page scrolls sideways`).toBeLessThanOrEqual(r.vw);
 }
+
+test('a first visit opens on the guide, and later visits go straight to practice', async ({ page, context, hasTouch }, testInfo) => {
+  const fresh = await context.newPage();
+  await fresh.goto('/');
+  // the same browser has already been through the guide in beforeEach, so this one starts on practice
+  await expect(fresh.locator('#practice .modes')).toBeVisible();
+  await expect(fresh.locator('#guide')).toBeHidden();
+  // the footer link brings the guide back
+  await press(fresh.getByRole('link', { name: 'How to use this trainer' }), hasTouch);
+  await expect(fresh.getByRole('heading', { name: 'How this trainer works' })).toBeVisible();
+  await expect(fresh.locator('#practice')).toBeHidden();
+  await expect(fresh.getByRole('heading', { name: 'How this trainer works' }), 'the guide opens at its top').toBeInViewport();
+  await expectFits(fresh, 'guide');
+  await shot(fresh, testInfo, 'guide');
+  await press(fresh.getByRole('button', { name: 'Back to practice' }).first(), hasTouch);
+  await expect(fresh.locator('#practice .modes')).toBeVisible();
+  await fresh.close();
+
+  // a browser with nothing saved lands on the guide
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'How this trainer works' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start practising' }).first()).toBeVisible();
+  await enter(page);
+});
 
 test('every practice mode fits the screen', async ({ page, hasTouch }, testInfo) => {
   for (const mode of ['Cross', 'F2L', 'OLL', 'PLL', 'Solve']) {
@@ -187,25 +218,33 @@ test('visit counting reports what was practised and how long, once each, and not
   await page.route(live, route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: fs.readFileSync(path.join(__dirname, '..', 'site', 'index.html'), 'utf8') }));
   await page.route('https://cloud.umami.is/**', route => route.fulfill({ contentType: 'text/javascript', body: 'window.__sent = []; window.umami = { track: (...a) => window.__sent.push(a) };' }));
   await page.goto(live);
+  await enter(page);
   await expect(page.locator('#privacy')).toContainText('counts visits anonymously');
   const sent = async () => (await page.evaluate(() => window.__sent)).map(a => a[0]);
 
-  // two F2L cases finished: one count, not two
-  for (let i = 0; i < 2; i++) {
+  // ten F2L cases finished: one count for the mode, and the ten-case milestone
+  for (let i = 0; i < 10; i++) {
     await press(page.getByRole('button', { name: 'Show solution without timing' }), hasTouch);
     await press(page.locator('.ratebtns .r1'), hasTouch);
+    if (i === 8) expect(await sent()).toEqual(['practised-f2l']);
   }
-  expect(await sent()).toEqual(['practised-f2l']);
+  expect(await sent()).toEqual(['practised-f2l', 'did-10-cases']);
+
+  // one quick full solve: counted, with a range for its time and never the time itself
+  await press(page.locator('#practice .modes button', { hasText: 'Solve' }), hasTouch);
+  for (let i = 0; i < 5; i++) { await press(page.locator('#solveTimer'), hasTouch); await page.clock.runFor(500); }
+  await expect(page.locator('.result .splitrow')).toHaveCount(4);
+  expect(await sent()).toEqual(['practised-f2l', 'did-10-cases', 'full-solve', 'solve-under-30s']);
 
   // six minutes of use, with a tap every two minutes
   for (let i = 0; i < 3; i++) { await page.clock.runFor('02:00'); await press(page.locator('h1'), hasTouch); }
-  expect(await sent()).toEqual(['practised-f2l', 'stayed-1-min', 'stayed-3-min', 'stayed-5-min']);
+  expect((await sent()).slice(4)).toEqual(['stayed-1-min', 'stayed-3-min', 'stayed-5-min']);
 
   // then the page is left open untouched for an hour: the clock stops after three idle minutes
   await page.clock.runFor('01:00:00');
   const names = await sent();
   expect(names).not.toContain('stayed-10-min');
-  for (const n of names) expect(n).toMatch(/^(practised-(cross|f2l|oll|pll)|drill-(f2l|oll|pll)|full-solve|stayed-\d+-min)$/);
+  for (const n of names) expect(n).toMatch(/^(practised-(cross|f2l|oll|pll)|drill-(f2l|oll|pll)|full-solve|solve-(under-30s|30-60s|1-2min|over-2min)|did-\d+-cases|stayed-\d+-min)$/);
   // every event is a bare name: no data rides along with it
   expect((await page.evaluate(() => window.__sent)).every(a => a.length === 1)).toBe(true);
 });

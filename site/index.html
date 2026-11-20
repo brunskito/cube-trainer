@@ -206,6 +206,14 @@ h1{white-space:nowrap}
   main:has(.timer.solve){padding-bottom:calc(170px + env(safe-area-inset-bottom,0px))}
 }
 .foot{margin:28px auto 0;text-align:center;max-width:60ch}
+.foot+.foot{margin-top:8px}
+.guide{max-width:66ch;margin:0 auto;padding-top:4px}
+.guide h2{font-size:1.05rem;margin:22px 0 6px}
+.guide h2.gtitle{font-size:1.35rem;margin-top:8px;letter-spacing:-.01em}
+.guide p{margin:0 0 10px}
+.guide ol,.guide ul{margin:0 0 10px;padding-left:22px}
+.guide li{margin-bottom:8px}
+.guide .btn.big{margin:8px 0 4px;touch-action:auto}
 /* ---------- larger screens ---------- */
 .topbar,.cols,.colA,.colB,.solo{display:contents}
 .lead,#cases>.small{max-width:70ch}
@@ -259,6 +267,8 @@ h1{white-space:nowrap}
 </header>
 <section id="practice"></section>
 <section id="cases" hidden></section>
+<section id="guide" hidden></section>
+<p class="small foot"><a class="link" href="#guide">How to use this trainer</a></p>
 <p class="small foot" id="privacy"></p>
 </main>
 <script>
@@ -551,6 +561,18 @@ if (counting) setInterval(() => {
   activeMs += STAY_TICK;
   for (const m of STAY_MARKS) if (activeMs >= m * 60000) trackOnce('stayed-' + m + '-min');
 }, STAY_TICK);
+// How much gets practised in a visit (cases, drill answers and full solves together), as milestones.
+const CASE_MARKS = [10, 25, 50, 100];
+let visitCases = 0;
+function countPractice() { visitCases++; for (const m of CASE_MARKS) if (visitCases >= m) trackOnce('did-' + m + '-cases'); }
+// A rough range for full-solve time, once per visit: the average of 5 when there is one, otherwise the solve just done.
+// Only the range is sent, never the time itself.
+let rangeSent = false;
+function reportSolveRange(ms) {
+  if (rangeSent) return; rangeSent = true;
+  const s = ms / 1000;
+  trackOnce('solve-' + (s < 30 ? 'under-30s' : s < 60 ? '30-60s' : s < 120 ? '1-2min' : 'over-2min'));
+}
 const S = () => store.settings;
 const mode = () => S().mode;
 
@@ -776,7 +798,8 @@ function record(v) {
   st.u = Date.now(); if (v !== null) { st.r.push(v); st.r = st.r.slice(-5); }
   st.n++; if (current.timed) { st.t.push(Math.round(elapsed)); st.t = st.t.slice(-20); if (current.rec != null) { st.rc = (st.rc || []).concat(Math.round(current.rec)).slice(-20); } }
   session.n++; if (current.timed) session.times.push(elapsed);
-  trackOnce('practised-' + current.mode);
+  trackOnce('practised-' + current.mode); countPractice();
+  if (!S().seenGuide) S().seenGuide = true;
   save();
 }
 function rate(v) { record(v); newCase(); }
@@ -1122,7 +1145,7 @@ function drillAnswer(id) {
   const key = 'rg:' + q.key, st = store.stats[key] || (store.stats[key] = { n: 0, ok: 0, t: [], m: [] });
   st.n++; if (right) { st.ok++; st.t = st.t.concat(Math.round(ms)).slice(-20); } st.m = st.m.concat(right ? 0 : 1).slice(-5); st.u = Date.now(); save();
   drill.n++; if (right) { drill.ok++; drill.times.push(ms); }
-  trackOnce('drill-' + q.m);
+  trackOnce('drill-' + q.m); countPractice();
   drill.fb = { right, picked: id, ms };
   drawDrill();
   if (right && !reviewOn()) drill.adv = setTimeout(() => { if (drill.running && drill.q === q) drillNext(); }, 450);
@@ -1267,7 +1290,8 @@ function solveTap() {
       const splits = sp.marks.map((m, j) => Math.round(m - (j ? sp.marks[j - 1] : sp.start)));
       sp.result = { t: splits.reduce((a, b) => a + b, 0), s: splits, d: Date.now(), x: current.best };
       store.solves.push(sp.result); store.solves = store.solves.slice(-500); save();
-      session.n++; session.times.push(sp.result.t); trackOnce('full-solve');
+      session.n++; session.times.push(sp.result.t);
+      trackOnce('full-solve'); countPractice(); reportSolveRange(avgN(store.solves.map(x => x.t), 5) || sp.result.t);
       renderPractice(); return;
     }
   }
@@ -1373,10 +1397,44 @@ document.addEventListener('visibilitychange', keepAwake);
 document.addEventListener('pointerdown', () => { if (awakeOn() && !wakeLock) keepAwake(); });
 
 // ---------- tabs & keys ----------
+// ---------- guide: what the trainer is and how to use it (shown first on a first visit) ----------
+function renderGuide() {
+  const start = () => el('button', { class: 'btn big', onclick: () => { S().seenGuide = true; save(); show('practice'); window.scrollTo(0, 0); } }, S().seenGuide ? 'Back to practice' : 'Start practising');
+  const li = (b, t) => el('li', {}, el('strong', {}, b), t);
+  $('#guide').replaceChildren(el('div', { class: 'guide' },
+    el('h2', { class: 'gtitle' }, 'How this trainer works'),
+    el('p', {}, 'Cube trainer helps you get faster at solving a 3x3 cube with the CFOP method: the cross, the first two layers (F2L), then the last layer in two short steps each (2-look OLL and PLL). It shows one case at a time on a 3D cube, times you, and then walks you through the solution move by move.'),
+    el('p', {}, 'You need a real cube for most of it. The recognition drill works without one. It’s free, and there’s no account.'),
+    start(),
+    el('h2', {}, 'A practice round'),
+    el('ol', {},
+      li('Pick what to practise. ', 'Use the bar at the top: Cross, F2L, OLL, PLL, or a full Solve.'),
+      li('Set up your cube. ', 'Hold it with white on the bottom and green in front, then do the moves shown. Your cube should now match the picture. Drag the picture to look around it.'),
+      li('Run the timer. ', 'Tap it when the setup is done, tap again when you start turning, and once more when the case is solved. That gives you a recognition time and a turning time. On a keyboard the space bar does the same. Cross practice has just a start and a stop.'),
+      li('Study the solution. ', 'Step through it with Back, Play and Next and watch the cube turn. Each group of moves comes with a line saying what it’s for.'),
+      li('Say how it felt. ', 'Easy, Okay or Hard. Hard cases come back more often.')),
+    el('h2', {}, 'Other ways to practise'),
+    el('ul', {},
+      li('Recognition drill. ', 'For F2L, OLL and PLL, with no cube: a case appears and you pick its solution or its name. Switch to it with the link under the timer.'),
+      li('Solve. ', 'A full solve with one tap after each step, so you can see where your time goes: cross, F2L, OLL or PLL.'),
+      li('Cases. ', 'The tab at the top right lists every case with its algorithm and your own numbers. Untick a case to leave it out of practice.'),
+      li('Change. ', 'The link beside the summary line picks which case groups come up, which slot you practise, and which color you hold in front.')),
+    el('h2', {}, 'Reading the moves'),
+    el('p', {}, 'Each letter is one face, turned a quarter turn clockwise as if you were looking straight at that face: R right, L left, U top, D bottom, F front, B back. An apostrophe (R\') means counter-clockwise and a 2 (R2) means a half turn. A lowercase y means turn the whole cube the way a U move goes.'),
+    el('h2', {}, 'Keyboard'),
+    el('p', {}, 'Space runs the timer, 1 2 3 rate a case as easy, okay or hard, and the left and right arrows step through a solution.'),
+    el('h2', {}, 'Your progress'),
+    el('p', {}, 'Your times and stats are saved in this browser, on this device. They are not uploaded. Clearing this site’s data in your browser clears them.'),
+    start()));
+}
+const firstVisit = () => !S().seenGuide && !Object.keys(store.stats).length && !store.solves.length;
+const tabFromHash = () => ({ '#cases': 'cases', '#guide': 'guide' })[location.hash] || (firstVisit() ? 'guide' : 'practice');
 function show(tab) {
-  for (const t of ['practice', 'cases']) { $('#' + t).hidden = t !== tab; $('#tab-' + t).setAttribute('aria-selected', String(t === tab)); }
-  if (tab === 'cases') { drillInterrupt(); renderCases(); } else if (!current || current.mode !== mode()) newCase(); else renderPractice();
-  location.hash = tab === 'cases' ? 'cases' : '';
+  for (const t of ['practice', 'cases', 'guide']) { $('#' + t).hidden = t !== tab; const b = $('#tab-' + t); if (b) b.setAttribute('aria-selected', String(t === tab)); }
+  if (tab === 'guide') { drillInterrupt(); renderGuide(); window.scrollTo(0, 0); }
+  else if (tab === 'cases') { drillInterrupt(); renderCases(); } else if (!current || current.mode !== mode()) newCase(); else renderPractice();
+  if (tab !== 'guide' && !S().seenGuide) { S().seenGuide = true; save(); } // chose a tab by hand: don't send them back to the guide
+  location.hash = tab === 'practice' ? '' : tab;
 }
 const _origMode = MODES; // mode bar re-renders the active tab
 document.addEventListener('click', e => { const b = e.target.closest('.modes button'); if (b && !$('#cases').hidden) setTimeout(renderCases, 0); });
@@ -1389,12 +1447,12 @@ document.addEventListener('keydown', e => {
   }
   if (phase === 'done') { if (e.key === 'ArrowRight') { stopPlay(); setStep(step + 1); } else if (e.key === 'ArrowLeft') { stopPlay(); setStep(step - 1); } }
 });
-window.addEventListener('hashchange', () => show(location.hash === '#cases' ? 'cases' : 'practice'));
+window.addEventListener('hashchange', () => show(tabFromHash()));
 $('#tab-practice').addEventListener('click', () => show('practice'));
 $('#tab-cases').addEventListener('click', () => show('cases'));
-show(location.hash === '#cases' ? 'cases' : 'practice');
+show(tabFromHash());
 keepAwake();
-$('#privacy').textContent = 'Your practice stats and settings are saved only in this browser.' + (counting ? ' This site counts visits anonymously (which practice modes get used and roughly how long a visit lasts): no cookies, nothing personal, and none of your times or stats.' : '');
+$('#privacy').textContent = 'Your practice stats and settings are saved only in this browser.' + (counting ? ' This site counts visits anonymously: which practice modes get used, roughly how long a visit lasts and how much gets practised, and a rough range for full-solve time (such as “30 to 60 seconds”). No cookies, nothing personal, and never your actual times or stats.' : '');
 
 </script>
 </body>
