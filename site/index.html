@@ -262,7 +262,7 @@ h1{white-space:nowrap}
   <h1>Cube trainer</h1>
   <nav role="tablist" aria-label="Views">
     <button role="tab" id="tab-practice" aria-selected="true">Practice</button>
-    <button role="tab" id="tab-cases" aria-selected="false">Cases</button>
+    <button role="tab" id="tab-cases" aria-selected="false">Stats</button>
   </nav>
 </header>
 <section id="practice"></section>
@@ -1417,7 +1417,7 @@ function renderGuide() {
     el('ul', {},
       li('Recognition drill. ', 'For F2L, OLL and PLL, with no cube: a case appears and you pick its solution or its name. Switch to it with the link under the timer.'),
       li('Solve. ', 'A full solve with one tap after each step, so you can see where your time goes: cross, F2L, OLL or PLL.'),
-      li('Cases. ', 'The tab at the top right lists every case with its algorithm and your own numbers. Untick a case to leave it out of practice.'),
+      li('Stats. ', 'The tab at the top right shows your own numbers: tries, average times and how each case feels, and for full solves your best, your averages and where your time goes. It also lists every case with its algorithm. Untick a case to leave it out of practice.'),
       li('Change. ', 'The link beside the summary line picks which case groups come up, which slot you practise, and which color you hold in front.')),
     el('h2', {}, 'Reading the moves'),
     el('p', {}, 'Each letter is one face, turned a quarter turn clockwise as if you were looking straight at that face: R right, L left, U top, D bottom, F front, B back. An apostrophe (R\') means counter-clockwise and a 2 (R2) means a half turn. A lowercase y means turn the whole cube the way a U move goes.'),
