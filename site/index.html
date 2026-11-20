@@ -522,9 +522,9 @@ function save() { store.savedAt = Date.now(); saveLocal(); }
 function syncText() { return 'Your stats and settings are saved in this browser, on this device only.'; }
 
 // ---------- anonymous visit counts (Umami) ----------
-// Leave UMAMI_ID empty and the page sends nothing. With an ID it reports visits plus three button-level events:
-// a case finished, a full solve finished, a drill answer. No cookies, no names, no times or stats, nothing typed.
-// Browsers that ask not to be tracked are left out.
+// Leave UMAMI_ID empty and the page sends nothing. With an ID it reports visits, plus one count per visit for
+// each kind of practice used (a mode practised, a full solve, the drill). No cookies, no names, no times or
+// stats, nothing typed. Browsers that ask not to be tracked are left out.
 const UMAMI_ID = '';
 const counting = !!UMAMI_ID && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 if (counting) {
@@ -533,7 +533,14 @@ if (counting) {
   s.dataset.websiteId = UMAMI_ID; s.dataset.doNotTrack = 'true';
   document.head.append(s);
 }
-function track(name, data) { try { if (window.umami) window.umami.track(name, data); } catch (e) {} }
+// at most one count per page load for each kind of practice, so heavy use can't flood a free analytics plan
+const tracked = new Set();
+function trackOnce(name, data) {
+  const k = name + JSON.stringify(data || {});
+  if (tracked.has(k) || !window.umami) return;
+  tracked.add(k);
+  try { window.umami.track(name, data); } catch (e) {}
+}
 const S = () => store.settings;
 const mode = () => S().mode;
 
@@ -759,7 +766,7 @@ function record(v) {
   st.u = Date.now(); if (v !== null) { st.r.push(v); st.r = st.r.slice(-5); }
   st.n++; if (current.timed) { st.t.push(Math.round(elapsed)); st.t = st.t.slice(-20); if (current.rec != null) { st.rc = (st.rc || []).concat(Math.round(current.rec)).slice(-20); } }
   session.n++; if (current.timed) session.times.push(elapsed);
-  track('case-done', { mode: current.mode, timed: !!current.timed });
+  trackOnce('practised', { mode: current.mode });
   save();
 }
 function rate(v) { record(v); newCase(); }
@@ -1105,7 +1112,7 @@ function drillAnswer(id) {
   const key = 'rg:' + q.key, st = store.stats[key] || (store.stats[key] = { n: 0, ok: 0, t: [], m: [] });
   st.n++; if (right) { st.ok++; st.t = st.t.concat(Math.round(ms)).slice(-20); } st.m = st.m.concat(right ? 0 : 1).slice(-5); st.u = Date.now(); save();
   drill.n++; if (right) { drill.ok++; drill.times.push(ms); }
-  track('drill-answer', { mode: q.m, right });
+  trackOnce('drill-used', { mode: q.m });
   drill.fb = { right, picked: id, ms };
   drawDrill();
   if (right && !reviewOn()) drill.adv = setTimeout(() => { if (drill.running && drill.q === q) drillNext(); }, 450);
@@ -1250,7 +1257,7 @@ function solveTap() {
       const splits = sp.marks.map((m, j) => Math.round(m - (j ? sp.marks[j - 1] : sp.start)));
       sp.result = { t: splits.reduce((a, b) => a + b, 0), s: splits, d: Date.now(), x: current.best };
       store.solves.push(sp.result); store.solves = store.solves.slice(-500); save();
-      session.n++; session.times.push(sp.result.t); track('solve-done');
+      session.n++; session.times.push(sp.result.t); trackOnce('full-solve');
       renderPractice(); return;
     }
   }
