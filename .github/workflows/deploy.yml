@@ -36,6 +36,15 @@ jobs:
             playwright-report/
             test-results/screens/
           retention-days: 14
+      # Package the site here, once the tests have passed, so it is fully registered before the deploy job
+      # asks for it. Uploading and deploying back to back in one job sometimes failed with
+      # "No artifacts named github-pages were found".
+      - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: site
 
   deploy:
     needs: test
@@ -48,10 +57,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
       - id: deployment
         uses: actions/deploy-pages@v4
