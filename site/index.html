@@ -525,7 +525,7 @@ function syncText() { return 'Your stats and settings are saved in this browser,
 // Leave UMAMI_ID empty and the page sends nothing. With an ID it reports visits, plus one count per visit for
 // each kind of practice used (a mode practised, a full solve, the drill). No cookies, no names, no times or
 // stats, nothing typed. Browsers that ask not to be tracked are left out.
-const UMAMI_ID = '';
+const UMAMI_ID = 'f68593de-8baf-4154-a498-c2b70c0b78f6';
 const counting = !!UMAMI_ID && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 if (counting) {
   const s = document.createElement('script');
