@@ -95,6 +95,19 @@ test('timing an F2L case shows the solution, and rating it saves a stat', async 
   expect(tries).toBe(1);
 });
 
+test('a timer tap right after the page loads still counts', async ({ page, hasTouch }) => {
+  // Slow the page's clock 200x so every tap lands "within a few milliseconds of loading",
+  // which is what a very fast device does for real. The double-tap guard must not eat the first tap.
+  await page.addInitScript(() => { const real = performance.now.bind(performance); performance.now = () => real() / 200; });
+  await page.reload();
+  await press(page.locator('#timer'), hasTouch);
+  await expect(page.locator('#timer')).toHaveClass(/looking/);
+  await page.reload();
+  await press(page.locator('#practice .modes button', { hasText: 'Solve' }), hasTouch);
+  await press(page.locator('#solveTimer'), hasTouch);
+  await expect(page.locator('#solveTimer')).toHaveClass(/running/);
+});
+
 test('stepping through a solution turns the cube', async ({ page, hasTouch }) => {
   await press(page.getByRole('button', { name: 'Show solution without timing' }), hasTouch);
   const moves = page.locator('.result .mv');

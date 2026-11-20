@@ -772,7 +772,7 @@ function record(v) {
 function rate(v) { record(v); newCase(); }
 function logCross() { current.logged = true; record(null); }
 function nextCross() { if (!current.logged) { current.logged = true; record(null); } newCase(); }
-let swallowUntil = 0, lastTimerTap = 0;
+let swallowUntil = 0, lastTimerTap = -Infinity; // -Infinity so a tap right after the page loads isn't mistaken for a double tap
 document.addEventListener('click', e => { if (performance.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
 function bindTap(btn, fn, active) {
   let down = null;
@@ -1246,7 +1246,7 @@ function solveTap() {
   if (!current || current.mode !== 'solve') return;
   const sp = current.sp, now = performance.now();
   if (sp.stage === 'done') { newCase(); return; }
-  if (now - (sp.lastTap || 0) < 300) return; // ignore accidental double taps
+  if (sp.lastTap != null && now - sp.lastTap < 300) return; // ignore accidental double taps
   sp.lastTap = now;
   if (sp.stage === 'ready' && S().solve.inspect) { sp.stage = 'inspect'; sp.inspectStart = now; }
   else if (sp.stage === 'ready' || sp.stage === 'inspect') { sp.stage = 'running'; sp.start = now; sp.marks = []; }
