@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
+const fs = require('fs');
 
 const STORE = 'f2l-trainer-v1';
 let errors;
@@ -177,6 +178,36 @@ test('choices are remembered after a reload', async ({ page, hasTouch }) => {
   await expect(page.locator('#practice .modes button.on')).toHaveText('PLL');
   await page.reload();
   await expect(page.locator('#practice .modes button.on')).toHaveText('PLL');
+});
+
+test('visit counting reports what was practised and how long, once each, and nothing else', async ({ page, hasTouch }) => {
+  // Counting is off on localhost, so serve the local page at the live address and swap Umami's script for a recorder.
+  const live = 'https://brunskito.github.io/cube-trainer/';
+  await page.clock.install();
+  await page.route(live, route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: fs.readFileSync(path.join(__dirname, '..', 'site', 'index.html'), 'utf8') }));
+  await page.route('https://cloud.umami.is/**', route => route.fulfill({ contentType: 'text/javascript', body: 'window.__sent = []; window.umami = { track: (...a) => window.__sent.push(a) };' }));
+  await page.goto(live);
+  await expect(page.locator('#privacy')).toContainText('counts visits anonymously');
+  const sent = async () => (await page.evaluate(() => window.__sent)).map(a => a[0]);
+
+  // two F2L cases finished: one count, not two
+  for (let i = 0; i < 2; i++) {
+    await press(page.getByRole('button', { name: 'Show solution without timing' }), hasTouch);
+    await press(page.locator('.ratebtns .r1'), hasTouch);
+  }
+  expect(await sent()).toEqual(['practised-f2l']);
+
+  // six minutes of use, with a tap every two minutes
+  for (let i = 0; i < 3; i++) { await page.clock.runFor('02:00'); await press(page.locator('h1'), hasTouch); }
+  expect(await sent()).toEqual(['practised-f2l', 'stayed-1-min', 'stayed-3-min', 'stayed-5-min']);
+
+  // then the page is left open untouched for an hour: the clock stops after three idle minutes
+  await page.clock.runFor('01:00:00');
+  const names = await sent();
+  expect(names).not.toContain('stayed-10-min');
+  for (const n of names) expect(n).toMatch(/^(practised-(cross|f2l|oll|pll)|drill-(f2l|oll|pll)|full-solve|stayed-\d+-min)$/);
+  // every event is a bare name: no data rides along with it
+  expect((await page.evaluate(() => window.__sent)).every(a => a.length === 1)).toBe(true);
 });
 
 test('the space bar runs the timer on a keyboard', async ({ page, hasTouch }) => {

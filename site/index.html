@@ -523,8 +523,8 @@ function syncText() { return 'Your stats and settings are saved in this browser,
 
 // ---------- anonymous visit counts (Umami) ----------
 // Leave UMAMI_ID empty and the page sends nothing. With an ID it reports visits, plus one count per visit for
-// each kind of practice used (a mode practised, a full solve, the drill). No cookies, no names, no times or
-// stats, nothing typed. Browsers that ask not to be tracked are left out.
+// each kind of practice used (a mode practised, a full solve, the drill) and for how long the visit lasted.
+// No cookies, no names, no solve times or stats, nothing typed. Browsers that ask not to be tracked are left out.
 const UMAMI_ID = 'f68593de-8baf-4154-a498-c2b70c0b78f6';
 const counting = !!UMAMI_ID && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 if (counting) {
@@ -533,14 +533,24 @@ if (counting) {
   s.dataset.websiteId = UMAMI_ID; s.dataset.doNotTrack = 'true';
   document.head.append(s);
 }
-// at most one count per page load for each kind of practice, so heavy use can't flood a free analytics plan
+// At most one count per page load for each event name, so heavy use can't flood a free analytics plan.
+// Everything is in the name (practised-f2l, drill-oll, full-solve, stayed-5-min) so the dashboard's event list reads on its own.
 const tracked = new Set();
-function trackOnce(name, data) {
-  const k = name + JSON.stringify(data || {});
-  if (tracked.has(k) || !window.umami) return;
-  tracked.add(k);
-  try { window.umami.track(name, data); } catch (e) {}
+function trackOnce(name) {
+  if (tracked.has(name) || !window.umami) return;
+  tracked.add(name);
+  try { window.umami.track(name); } catch (e) {}
 }
+// How long a visit lasts: time with the page on screen and a tap or key press in the last three minutes,
+// reported as milestones. A one-page site sends nothing after it loads, so without these every visit looks 0 seconds long.
+const STAY_MARKS = [1, 3, 5, 10, 20, 30, 60], STAY_TICK = 15000, STAY_IDLE = 180000;
+let activeMs = 0, lastInput = Date.now();
+for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { lastInput = Date.now(); }, true);
+if (counting) setInterval(() => {
+  if (document.visibilityState !== 'visible' || Date.now() - lastInput > STAY_IDLE) return;
+  activeMs += STAY_TICK;
+  for (const m of STAY_MARKS) if (activeMs >= m * 60000) trackOnce('stayed-' + m + '-min');
+}, STAY_TICK);
 const S = () => store.settings;
 const mode = () => S().mode;
 
@@ -766,7 +776,7 @@ function record(v) {
   st.u = Date.now(); if (v !== null) { st.r.push(v); st.r = st.r.slice(-5); }
   st.n++; if (current.timed) { st.t.push(Math.round(elapsed)); st.t = st.t.slice(-20); if (current.rec != null) { st.rc = (st.rc || []).concat(Math.round(current.rec)).slice(-20); } }
   session.n++; if (current.timed) session.times.push(elapsed);
-  trackOnce('practised', { mode: current.mode });
+  trackOnce('practised-' + current.mode);
   save();
 }
 function rate(v) { record(v); newCase(); }
@@ -1112,7 +1122,7 @@ function drillAnswer(id) {
   const key = 'rg:' + q.key, st = store.stats[key] || (store.stats[key] = { n: 0, ok: 0, t: [], m: [] });
   st.n++; if (right) { st.ok++; st.t = st.t.concat(Math.round(ms)).slice(-20); } st.m = st.m.concat(right ? 0 : 1).slice(-5); st.u = Date.now(); save();
   drill.n++; if (right) { drill.ok++; drill.times.push(ms); }
-  trackOnce('drill-used', { mode: q.m });
+  trackOnce('drill-' + q.m);
   drill.fb = { right, picked: id, ms };
   drawDrill();
   if (right && !reviewOn()) drill.adv = setTimeout(() => { if (drill.running && drill.q === q) drillNext(); }, 450);
@@ -1384,7 +1394,7 @@ $('#tab-practice').addEventListener('click', () => show('practice'));
 $('#tab-cases').addEventListener('click', () => show('cases'));
 show(location.hash === '#cases' ? 'cases' : 'practice');
 keepAwake();
-$('#privacy').textContent = 'Your practice stats and settings are saved only in this browser.' + (counting ? ' This site counts visits anonymously: no cookies, nothing personal, and none of your times or stats.' : '');
+$('#privacy').textContent = 'Your practice stats and settings are saved only in this browser.' + (counting ? ' This site counts visits anonymously (which practice modes get used and roughly how long a visit lasts): no cookies, nothing personal, and none of your times or stats.' : '');
 
 </script>
 </body>

@@ -4,7 +4,7 @@ A 3x3 speedcube trainer for the CFOP method: cross, F2L, and 2-look OLL and PLL.
 
 Everything runs in the browser. Progress is saved in the browser's local storage on the device you use and never leaves it.
 
-The live site counts visits anonymously with Umami: no cookies, nothing personal, and none of your times or stats. Beyond the visit itself it sends at most one count per visit for each kind of practice used (a mode practised, a full solve, the recognition drill). Browsers set to Do Not Track are left out, and nothing is counted when the page runs on localhost.
+The live site counts visits anonymously with Umami: no cookies, nothing personal, and none of your times or stats. Beyond the visit itself it sends at most one count per visit for each kind of practice used (`practised-f2l`, `drill-oll`, `full-solve` and so on) and for how long the visit lasted (`stayed-1-min`, `stayed-5-min`, up to `stayed-60-min`), counting only time with the page on screen and in use. Browsers set to Do Not Track are left out, and nothing is counted when the page runs on localhost.
 
 ## Layout
 
